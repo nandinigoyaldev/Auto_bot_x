@@ -14,8 +14,12 @@ const notificationsBox = document.getElementById("notifications-box");
 const toggleAsciiButton = document.getElementById("toggleAsciiButton");
 const videoWrapper = document.getElementById("video-wrapper");
 const asciiOutput = document.getElementById("ascii-output");
+const sentryModeBtn = document.getElementById("sentryModeBtn");
+const securityPanel = document.getElementById("security-panel");
+const securityLogBox = document.getElementById("security-log-box");
 
 let handLandmarker = undefined;
+let cocoSsdModel = undefined;
 let runningMode = "VIDEO";
 let webcamRunning = false;
 let lastVideoTime = -1;
@@ -25,6 +29,11 @@ let jarvisRotation = 0;
 let spotifyAccessToken = null;
 let isAsciiMode = false;
 let isJarvisActive = false;
+let isSentryArmed = false;
+let latestPredictions = [];
+let isDetectingObjects = false;
+let lastSentryAlertTime = 0;
+let previousFrameData = null;
 
 // Audio setup
 const jarvisAudio = new Audio("/audios/jarvis.wav");
@@ -41,9 +50,6 @@ function speak(text) {
         window.speechSynthesis.speak(utterance);
     }
 }
-let jarvisRotation = 0;
-let spotifyAccessToken = null;
-let isAsciiMode = false;
 
 // ASCII setup
 const asciiCanvas = document.createElement('canvas');
@@ -161,6 +167,16 @@ async function createHandLandmarker() {
 
 createHandLandmarker();
 
+// Load Object Detection Model
+if (typeof cocoSsd !== 'undefined') {
+    cocoSsd.load().then(model => {
+        cocoSsdModel = model;
+        addNotification("COCO-SSD Object Detection Model Loaded.");
+        sentryModeBtn.style.display = "inline-block";
+        objectDetectionLoop();
+    });
+}
+
 toggleAsciiButton.addEventListener("click", () => {
     isAsciiMode = !isAsciiMode;
     if (isAsciiMode) {
@@ -171,6 +187,61 @@ toggleAsciiButton.addEventListener("click", () => {
         toggleAsciiButton.textContent = "Toggle ASCII Mode";
     }
 });
+
+sentryModeBtn.addEventListener("click", () => {
+    isSentryArmed = !isSentryArmed;
+    if (isSentryArmed) {
+        sentryModeBtn.textContent = "Disarm Sentry";
+        sentryModeBtn.style.background = "#64748b";
+        videoWrapper.classList.add("sentry-armed");
+        securityPanel.style.display = "block";
+        addSecurityLog("SYSTEM ARMED. Scanning for threats...");
+        speak("Sentry mode activated.");
+    } else {
+        sentryModeBtn.textContent = "Arm Sentry";
+        sentryModeBtn.style.background = "#ef4444";
+        videoWrapper.classList.remove("sentry-armed");
+        addSecurityLog("System disarmed.");
+        speak("Sentry mode deactivated.");
+    }
+});
+
+function addSecurityLog(msg) {
+    const p = document.createElement("p");
+    p.className = "sys-msg";
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    p.style.color = "#ef4444";
+    p.style.fontWeight = "bold";
+    securityLogBox.prepend(p);
+}
+
+async function objectDetectionLoop() {
+    if (!cocoSsdModel || !webcamRunning) {
+        requestAnimationFrame(objectDetectionLoop);
+        return;
+    }
+    if (!isDetectingObjects) {
+        isDetectingObjects = true;
+        try {
+            latestPredictions = await cocoSsdModel.detect(video);
+            
+            if (isSentryArmed) {
+                const hasPerson = latestPredictions.some(p => p.class === "person");
+                if (hasPerson && (Date.now() - lastSentryAlertTime > 8000)) {
+                    lastSentryAlertTime = Date.now();
+                    addSecurityLog("THIEF ALERT! Person detected in frame.");
+                    speak("Intruder detected. Alert logged.");
+                    videoWrapper.classList.add("flash-effect");
+                    setTimeout(() => videoWrapper.classList.remove("flash-effect"), 200);
+                }
+            }
+        } catch (e) {
+            console.error("Object detection error:", e);
+        }
+        isDetectingObjects = false;
+    }
+    requestAnimationFrame(objectDetectionLoop);
+}
 
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     enableWebcamButton.addEventListener("click", enableCam);
@@ -291,6 +362,33 @@ async function predictWebcam() {
             handednessOut.textContent = "-";
             gestureOutput.innerHTML = `<span class="placeholder">Waiting for hand...</span>`;
         }
+            
+            // Draw Object Detection Bounding Boxes
+            if (latestPredictions) {
+                const scaleX = canvasElement.width / video.videoWidth;
+                const scaleY = canvasElement.height / video.videoHeight;
+                latestPredictions.forEach(prediction => {
+                    const [x, y, width, height] = prediction.bbox;
+                    const isPerson = prediction.class === "person";
+                    const color = (isSentryArmed && isPerson) ? "#ef4444" : "#00FF00";
+                    
+                    canvasCtx.strokeStyle = color;
+                    canvasCtx.lineWidth = 2;
+                    canvasCtx.strokeRect(x * scaleX, y * scaleY, width * scaleX, height * scaleY);
+                    
+                    canvasCtx.fillStyle = color;
+                    canvasCtx.save();
+                    canvasCtx.translate(x * scaleX, y * scaleY);
+                    canvasCtx.scale(-1, 1); // Un-mirror for text readability
+                    canvasCtx.font = "14px Arial";
+                    canvasCtx.fillText(
+                        `${prediction.class} (${Math.round(prediction.score * 100)}%)`,
+                        -width * scaleX, 
+                        -5
+                    );
+                    canvasCtx.restore();
+                });
+            }
         canvasCtx.restore();
 
         if (isAsciiMode) {
@@ -543,6 +641,31 @@ function updateAsciiFrame() {
     const imageData = asciiCtx.getImageData(0, 0, ASCII_WIDTH, ASCII_HEIGHT);
     const data = imageData.data;
     
+    // Motion Detection for Ghost Protocol
+    let diffCount = 0;
+    if (previousFrameData) {
+        for (let i = 0; i < data.length; i += 4) {
+            const diff = Math.abs(data[i] - previousFrameData[i]) + 
+                         Math.abs(data[i+1] - previousFrameData[i+1]) + 
+                         Math.abs(data[i+2] - previousFrameData[i+2]);
+            if (diff > 100) diffCount++;
+            previousFrameData[i] = data[i];
+            previousFrameData[i+1] = data[i+1];
+            previousFrameData[i+2] = data[i+2];
+        }
+    } else {
+        previousFrameData = new Uint8ClampedArray(data);
+    }
+
+    if (isSentryArmed && diffCount > 800) { // Significant motion
+        const hasPerson = latestPredictions && latestPredictions.some(p => p.class === "person");
+        if (!hasPerson && (Date.now() - lastSentryAlertTime > 8000)) {
+            lastSentryAlertTime = Date.now();
+            addSecurityLog("GHOST ALERT: Significant motion detected with zero people!");
+            speak("Unknown entity detected. Ghost protocol initiated.");
+        }
+    }
+
     let asciiStr = "";
     for (let y = 0; y < ASCII_HEIGHT; y++) {
         // Iterate backwards through x to match the mirrored camera

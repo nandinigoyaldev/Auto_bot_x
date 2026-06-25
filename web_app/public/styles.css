@@ -124,6 +124,18 @@ header {
     overflow: hidden;
     display: flex;
     flex-direction: row;
+    transition: all 0.3s ease;
+}
+
+@keyframes pulse-border {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.video-wrapper.sentry-armed {
+    border: 3px solid #ef4444;
+    animation: pulse-border 2s infinite;
 }
 
 .feed-container {

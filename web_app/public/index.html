@@ -10,6 +10,10 @@
     
     <!-- MediaPipe dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.js" crossorigin="anonymous"></script>
+    
+    <!-- TensorFlow.js and COCO-SSD for Object Detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 </head>
 <body>
     <div class="app-container">
@@ -48,6 +52,9 @@
                     <button id="toggleAsciiButton" class="btn secondary" style="margin-left: 10px; display: none;">
                         Toggle ASCII Mode
                     </button>
+                    <button id="sentryModeBtn" class="btn secondary" style="margin-left: 10px; display: none; background: #ef4444;">
+                        Arm Sentry
+                    </button>
                     <p class="hint">Use gestures to interact with the system.</p>
                 </div>
             </section>
@@ -73,6 +80,13 @@
                     <h2>Recent Events</h2>
                     <div id="notifications-box" class="notes-box">
                         <p class="sys-msg">System initialized. Awaiting commands...</p>
+                    </div>
+                </div>
+
+                <div class="security-panel card" id="security-panel" style="display: none; border-color: #ef4444;">
+                    <h2 style="color: #ef4444;">Security Log</h2>
+                    <div id="security-log-box" class="notes-box">
+                        <p class="sys-msg">Sentry disarmed.</p>
                     </div>
                 </div>
             </section>
