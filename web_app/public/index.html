@@ -30,15 +30,25 @@
         <main class="dashboard">
             <!-- Camera Feed -->
             <section class="video-section card">
-                <div class="video-wrapper">
-                    <video id="webcam" autoplay playsinline></video>
-                    <canvas id="output_canvas"></canvas>
+                <div class="video-wrapper" id="video-wrapper">
+                    <div class="feed-container" id="feed-original">
+                        <div class="feed-label">Original</div>
+                        <video id="webcam" autoplay playsinline></video>
+                        <canvas id="output_canvas"></canvas>
+                    </div>
+                    <div class="feed-container" id="feed-clone">
+                        <div class="feed-label">Clone</div>
+                        <pre id="ascii-output"></pre>
+                    </div>
                 </div>
                 <div class="controls">
                     <button id="enableWebcamButton" class="btn primary">
                         Enable Camera
                     </button>
-                    <p class="hint">Show 5 fingers to capture profile photo.</p>
+                    <button id="toggleAsciiButton" class="btn secondary" style="margin-left: 10px; display: none;">
+                        Toggle ASCII Mode
+                    </button>
+                    <p class="hint">Use gestures to interact with the system.</p>
                 </div>
             </section>
 

@@ -11,6 +11,9 @@ const gestureOutput = document.getElementById("gesture-output");
 const trackingStatus = document.getElementById("tracking-status");
 const handednessOut = document.getElementById("handedness-out");
 const notificationsBox = document.getElementById("notifications-box");
+const toggleAsciiButton = document.getElementById("toggleAsciiButton");
+const videoWrapper = document.getElementById("video-wrapper");
+const asciiOutput = document.getElementById("ascii-output");
 
 let handLandmarker = undefined;
 let runningMode = "VIDEO";
@@ -20,6 +23,16 @@ let lastSignSentTime = 0;
 let lastCaptureTime = 0;
 let jarvisRotation = 0;
 let spotifyAccessToken = null;
+let isAsciiMode = false;
+
+// ASCII setup
+const asciiCanvas = document.createElement('canvas');
+const asciiCtx = asciiCanvas.getContext('2d', { willReadFrequently: true });
+const ASCII_CHARS = "@@##%%**++==--::..  ";
+const ASCII_WIDTH = 120;
+const ASCII_HEIGHT = 65;
+asciiCanvas.width = ASCII_WIDTH;
+asciiCanvas.height = ASCII_HEIGHT;
 
 // Extract access token from URL
 const urlParams = new URLSearchParams(window.location.search);
@@ -122,10 +135,22 @@ async function createHandLandmarker() {
         minTrackingConfidence: 0.7
     });
     enableWebcamButton.classList.remove("disabled");
+    toggleAsciiButton.style.display = "inline-block";
     addNotification("Vision System Initialized.");
 }
 
 createHandLandmarker();
+
+toggleAsciiButton.addEventListener("click", () => {
+    isAsciiMode = !isAsciiMode;
+    if (isAsciiMode) {
+        videoWrapper.classList.add("ascii-active");
+        toggleAsciiButton.textContent = "Disable ASCII Mode";
+    } else {
+        videoWrapper.classList.remove("ascii-active");
+        toggleAsciiButton.textContent = "Toggle ASCII Mode";
+    }
+});
 
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     enableWebcamButton.addEventListener("click", enableCam);
@@ -231,6 +256,10 @@ async function predictWebcam() {
             gestureOutput.innerHTML = `<span class="placeholder">Waiting for hand...</span>`;
         }
         canvasCtx.restore();
+
+        if (isAsciiMode) {
+            updateAsciiFrame();
+        }
     }
 
     if (webcamRunning === true) {
@@ -471,4 +500,30 @@ function drawJarvisCircle(ctx, landmarks, handName) {
     });
 
     ctx.restore();
+}
+
+function updateAsciiFrame() {
+    asciiCtx.drawImage(video, 0, 0, ASCII_WIDTH, ASCII_HEIGHT);
+    const imageData = asciiCtx.getImageData(0, 0, ASCII_WIDTH, ASCII_HEIGHT);
+    const data = imageData.data;
+    
+    let asciiStr = "";
+    for (let y = 0; y < ASCII_HEIGHT; y++) {
+        // Iterate backwards through x to match the mirrored camera
+        for (let x = ASCII_WIDTH - 1; x >= 0; x--) {
+            const index = (y * ASCII_WIDTH + x) * 4;
+            const r = data[index];
+            const g = data[index + 1];
+            const b = data[index + 2];
+            
+            // Calculate brightness
+            const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+            const charIndex = Math.floor((brightness / 255) * (ASCII_CHARS.length - 1));
+            
+            asciiStr += ASCII_CHARS[charIndex];
+        }
+        asciiStr += "\n";
+    }
+    
+    asciiOutput.textContent = asciiStr;
 }
