@@ -116,7 +116,7 @@ async function createHandLandmarker() {
             delegate: "GPU"
         },
         runningMode: runningMode,
-        numHands: 1,
+        numHands: 2,
         minHandDetectionConfidence: 0.7,
         minHandPresenceConfidence: 0.7,
         minTrackingConfidence: 0.7
@@ -183,21 +183,24 @@ async function predictWebcam() {
                 drawLandmarks(canvasCtx, landmarks, { color: "#3b82f6", lineWidth: 1, radius: 2 });
             }
             
-            // Finger counting heuristics
-            const fingerCount = detectFingerCount(results.landmarks[0]);
+            // Finger counting heuristics (Primary hand for Spotify gestures)
+            const primaryFingerCount = detectFingerCount(results.landmarks[0]);
             let gestureLabel = "";
             
-            switch(fingerCount) {
+            switch(primaryFingerCount) {
                 case 1: gestureLabel = "1 Finger (Spotify: Next)"; break;
                 case 2: gestureLabel = "2 Fingers (Spotify: Prev)"; break;
                 case 3: gestureLabel = "3 Fingers (Spotify: Play)"; break;
                 case 4: gestureLabel = "4 Fingers (Spotify: Pause)"; break;
-                case 5: gestureLabel = "5 Fingers (Jarvis Profile)"; break;
+                case 5: gestureLabel = "5 Fingers (Jarvis Mode)"; break;
                 default: gestureLabel = "Resting"; break;
             }
 
-            if (fingerCount === 5) {
-                drawJarvisCircle(canvasCtx, results.landmarks[0]);
+            // Draw Jarvis circle for ANY hand showing 5 fingers
+            for (const landmarks of results.landmarks) {
+                if (detectFingerCount(landmarks) === 5) {
+                    drawJarvisCircle(canvasCtx, landmarks);
+                }
             }
 
             if (gestureOutput.innerHTML !== gestureLabel) {
@@ -208,16 +211,13 @@ async function predictWebcam() {
                     lastSignSentTime = Date.now();
                     sendSignToAPI(gestureLabel);
                     
-                    if (fingerCount === 5 && (Date.now() - lastCaptureTime > 5000)) {
-                        lastCaptureTime = Date.now();
-                        captureAndRegisterUser();
-                    } else if (fingerCount === 1) {
+                    if (primaryFingerCount === 1) {
                         handleSpotifyCommand("next");
-                    } else if (fingerCount === 2) {
+                    } else if (primaryFingerCount === 2) {
                         handleSpotifyCommand("previous");
-                    } else if (fingerCount === 3) {
+                    } else if (primaryFingerCount === 3) {
                         handleSpotifyCommand("play");
-                    } else if (fingerCount === 4) {
+                    } else if (primaryFingerCount === 4) {
                         handleSpotifyCommand("pause");
                     }
                 }
