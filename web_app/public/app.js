@@ -18,6 +18,66 @@ let webcamRunning = false;
 let lastVideoTime = -1;
 let lastSignSentTime = 0;
 let lastCaptureTime = 0;
+let jarvisRotation = 0;
+let spotifyAccessToken = null;
+
+// Extract access token from URL
+const urlParams = new URLSearchParams(window.location.search);
+const tokenFromUrl = urlParams.get('access_token');
+if (tokenFromUrl) {
+    spotifyAccessToken = tokenFromUrl;
+    window.history.replaceState({}, document.title, "/");
+    
+    // Update button once DOM is loaded or immediately if already loaded
+    setTimeout(() => {
+        addNotification("Spotify connected successfully!");
+        const btn = document.getElementById('spotify-login-btn');
+        if (btn) {
+            btn.textContent = "Spotify: Connected";
+            btn.classList.add("active");
+            btn.href = "#";
+        }
+    }, 500);
+}
+
+async function handleSpotifyCommand(command) {
+    if (!spotifyAccessToken) {
+        addNotification("Please connect Spotify first.");
+        return;
+    }
+    
+    let url = "";
+    let method = "POST";
+    
+    if (command === "play") {
+        url = "https://api.spotify.com/v1/me/player/play";
+        method = "PUT";
+    } else if (command === "pause") {
+        url = "https://api.spotify.com/v1/me/player/pause";
+        method = "PUT";
+    } else if (command === "next") {
+        url = "https://api.spotify.com/v1/me/player/next";
+    } else if (command === "previous") {
+        url = "https://api.spotify.com/v1/me/player/previous";
+    }
+    
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: {
+                "Authorization": `Bearer ${spotifyAccessToken}`
+            }
+        });
+        if (!res.ok) {
+            addNotification(`Spotify Error: Open app first.`);
+        } else {
+            addNotification(`Spotify: ${command.toUpperCase()}`);
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
 
 // API connection check
 async function checkBackendAPI() {
@@ -128,12 +188,16 @@ async function predictWebcam() {
             let gestureLabel = "";
             
             switch(fingerCount) {
-                case 1: gestureLabel = "1 Finger (Next)"; break;
-                case 2: gestureLabel = "2 Fingers (Back)"; break;
-                case 3: gestureLabel = "3 Fingers (Scroll)"; break;
-                case 4: gestureLabel = "4 Fingers (Help)"; break;
-                case 5: gestureLabel = "5 Fingers (Capture Profile)"; break;
+                case 1: gestureLabel = "1 Finger (Spotify: Next)"; break;
+                case 2: gestureLabel = "2 Fingers (Spotify: Prev)"; break;
+                case 3: gestureLabel = "3 Fingers (Spotify: Play)"; break;
+                case 4: gestureLabel = "4 Fingers (Spotify: Pause)"; break;
+                case 5: gestureLabel = "5 Fingers (Jarvis Profile)"; break;
                 default: gestureLabel = "Resting"; break;
+            }
+
+            if (fingerCount === 5) {
+                drawJarvisCircle(canvasCtx, results.landmarks[0]);
             }
 
             if (gestureOutput.innerHTML !== gestureLabel) {
@@ -147,6 +211,14 @@ async function predictWebcam() {
                     if (fingerCount === 5 && (Date.now() - lastCaptureTime > 5000)) {
                         lastCaptureTime = Date.now();
                         captureAndRegisterUser();
+                    } else if (fingerCount === 1) {
+                        handleSpotifyCommand("next");
+                    } else if (fingerCount === 2) {
+                        handleSpotifyCommand("previous");
+                    } else if (fingerCount === 3) {
+                        handleSpotifyCommand("play");
+                    } else if (fingerCount === 4) {
+                        handleSpotifyCommand("pause");
                     }
                 }
             }
@@ -267,4 +339,51 @@ function drawLandmarks(ctx, landmarks, options) {
         ctx.arc(lm.x * canvasElement.width, lm.y * canvasElement.height, options.radius, 0, 2 * Math.PI);
         ctx.fill();
     }
+}
+
+function drawJarvisCircle(ctx, landmarks) {
+    const center = landmarks[9]; // Middle finger MCP
+    const x = center.x * canvasElement.width;
+    const y = center.y * canvasElement.height;
+    
+    // Calculate a dynamic radius based on hand size
+    const wrist = landmarks[0];
+    const middleTip = landmarks[12];
+    const dx = (wrist.x - middleTip.x) * canvasElement.width;
+    const dy = (wrist.y - middleTip.y) * canvasElement.height;
+    const handSize = Math.sqrt(dx*dx + dy*dy);
+    const baseRadius = handSize * 0.4;
+
+    jarvisRotation += 0.05;
+
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Outer dashed ring
+    ctx.rotate(jarvisRotation);
+    ctx.beginPath();
+    ctx.arc(0, 0, baseRadius * 1.2, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([15, 10]);
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = "cyan";
+    ctx.stroke();
+    
+    // Inner solid ring
+    ctx.rotate(-jarvisRotation * 1.5);
+    ctx.beginPath();
+    ctx.arc(0, 0, baseRadius, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(0, 200, 255, 0.6)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([50, 15, 10, 15]);
+    ctx.stroke();
+
+    // Core glow
+    ctx.beginPath();
+    ctx.arc(0, 0, baseRadius * 0.8, 0, 2 * Math.PI);
+    ctx.fillStyle = "rgba(0, 255, 255, 0.1)";
+    ctx.fill();
+
+    ctx.restore();
 }

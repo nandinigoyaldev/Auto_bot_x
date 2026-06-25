@@ -45,3 +45,57 @@ async def handle_register(payload: RegisterPayload):
         "message": "User profile successfully captured and stored securely.",
         "image_preview": payload.image_base64[:50] + "..." # Just for logging
     }
+
+import os
+import urllib.parse
+import urllib.request
+import json
+from fastapi.responses import RedirectResponse
+
+@app.get("/api/spotify/login")
+async def spotify_login():
+    client_id = os.getenv("SPOTIFY_CLIENT_ID", "")
+    redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8000/api/spotify/callback")
+    
+    scope = "user-modify-playback-state user-read-playback-state"
+    params = {
+        "client_id": client_id,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "scope": scope,
+        "show_dialog": "true"
+    }
+    url = "https://accounts.spotify.com/authorize?" + urllib.parse.urlencode(params)
+    return RedirectResponse(url=url)
+
+@app.get("/api/spotify/callback")
+async def spotify_callback(code: str = None, error: str = None):
+    if error:
+        return {"error": error}
+    
+    client_id = os.getenv("SPOTIFY_CLIENT_ID", "")
+    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "")
+    redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI", "http://localhost:8000/api/spotify/callback")
+    
+    data = urllib.parse.urlencode({
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+    }).encode("utf-8")
+    
+    req = urllib.request.Request("https://accounts.spotify.com/api/token", data=data)
+    
+    import base64
+    auth_str = f"{client_id}:{client_secret}"
+    b64_auth = base64.b64encode(auth_str.encode()).decode()
+    req.add_header("Authorization", f"Basic {b64_auth}")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            res_data = json.loads(response.read())
+            access_token = res_data.get("access_token")
+            # Redirect back to the frontend with the token
+            return RedirectResponse(url=f"/?access_token={access_token}")
+    except Exception as e:
+        return {"error": str(e)}
