@@ -222,9 +222,26 @@ function detectFingerCount(landmarks) {
     return Math.min(5, Math.max(0, count));
 }
 
+const HAND_CONNECTIONS = [
+    [0, 1], [1, 2], [2, 3], [3, 4],
+    [0, 5], [5, 6], [6, 7], [7, 8],
+    [5, 9], [9, 10], [10, 11], [11, 12],
+    [9, 13], [13, 14], [14, 15], [15, 16],
+    [13, 17], [17, 18], [18, 19], [19, 20],
+    [0, 17]
+];
+
 function drawConnectors(ctx, landmarks, options) {
     ctx.strokeStyle = options.color;
     ctx.lineWidth = options.lineWidth;
+    ctx.beginPath();
+    for (const connection of HAND_CONNECTIONS) {
+        const p1 = landmarks[connection[0]];
+        const p2 = landmarks[connection[1]];
+        ctx.moveTo(p1.x * canvasElement.width, p1.y * canvasElement.height);
+        ctx.lineTo(p2.x * canvasElement.width, p2.y * canvasElement.height);
+    }
+    ctx.stroke();
 }
 
 function drawLandmarks(ctx, landmarks, options) {
@@ -238,6 +255,9 @@ function drawLandmarks(ctx, landmarks, options) {
 
 function drawJarvisCircle(ctx, landmarks, handName) {
     const center = landmarks[9]; // Middle finger MCP
+    const x = center.x * canvasElement.width;
+    const y = center.y * canvasElement.height;
+    
     const dx = landmarks[0].x - landmarks[9].x;
     const dy = landmarks[0].y - landmarks[9].y;
     const handSize = Math.sqrt(dx*dx + dy*dy);
@@ -251,95 +271,80 @@ function drawJarvisCircle(ctx, landmarks, handName) {
     const hue = handName === "Left" ? 180 : 35; // Cyan for left, Orange for right
     
     ctx.save();
-    ctx.translate(center.x * canvasElement.width, center.y * canvasElement.height);
+    ctx.translate(x, y);
     ctx.rotate(jarvisRotation);
     ctx.scale(pulse, pulse);
 
     // Make the colors pop much stronger
     ctx.globalCompositeOperation = "screen";
 
-    // Heavy Outer glow
+    // Heavy Outer glow block
     ctx.beginPath();
     ctx.arc(0, 0, baseRadius + 20, 0, 2 * Math.PI);
     ctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.4)`;
     ctx.fill();
 
-    ctx.rotate(-jarvisRotation * 1.5);
+    // Thick Main Ring block
     ctx.beginPath();
-    ctx.arc(0, 0, baseRadius * 1.0, 0.2, 2 * Math.PI - 0.2);
-    ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.7)`;
-    ctx.lineWidth = 4;
-    ctx.setLineDash([80, 30]);
+    ctx.arc(0, 0, baseRadius, 0, 2 * Math.PI);
+    ctx.strokeStyle = `hsla(${hue}, 100%, 60%, 1)`;
+    ctx.lineWidth = 12; // Extra heavy
     ctx.stroke();
-    
-    // Draw an inscribed hexagon
+
+    // Inner Dashed Ring block
     ctx.beginPath();
-    for (let i = 0; i <= 6; i++) {
-        const angle = i * Math.PI / 3;
-        const px = Math.cos(angle) * baseRadius * 1.0;
-        const py = Math.sin(angle) * baseRadius * 1.0;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
+    ctx.setLineDash([20, 15]);
+    ctx.arc(0, 0, baseRadius - 20, 0, 2 * Math.PI);
+    ctx.strokeStyle = `hsla(${hue}, 100%, 70%, 1)`;
+    ctx.lineWidth = 8; // Extra heavy
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset
+
+    // Core solid ring block
+    ctx.beginPath();
+    ctx.arc(0, 0, baseRadius - 40, 0, 2 * Math.PI);
+    ctx.fillStyle = `hsla(${hue}, 100%, 80%, 0.6)`;
+    ctx.fill();
+
+    // Draw heavy tech nodes on the outer ring
+    for (let i = 0; i < 4; i++) {
+        const angle = (i * Math.PI) / 2;
+        const nx = Math.cos(angle) * baseRadius;
+        const ny = Math.sin(angle) * baseRadius;
+        ctx.beginPath();
+        ctx.rect(nx - 10, ny - 10, 20, 20); // Square blocks
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 1)`;
+        ctx.lineWidth = 4;
+        ctx.stroke();
     }
-    ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.stroke();
+
     ctx.restore();
 
-    // Outer thick radar band
+    // Draw heavy cybernetic lines to fingertips
     ctx.save();
-    ctx.rotate(jarvisRotation * 0.8);
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius * 1.3, 0, Math.PI * 0.7);
-    ctx.strokeStyle = `hsla(${hue}, 80%, 50%, 0.5)`;
-    ctx.lineWidth = 10;
-    ctx.setLineDash([]);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius * 1.3, Math.PI, Math.PI * 1.7);
-    ctx.stroke();
-    
-    // Outer tick marks
-    ctx.beginPath();
-    ctx.arc(0, 0, baseRadius * 1.45, 0, 2 * Math.PI);
-    ctx.strokeStyle = `hsla(${hue}, 100%, 60%, 0.6)`;
-    ctx.lineWidth = 4;
-    ctx.setLineDash([2, 18]);
-    ctx.stroke();
-    ctx.restore();
-
-    // Draw cybernetic lines to fingertips
-    ctx.setLineDash([5, 5]);
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.7)`;
+    ctx.globalCompositeOperation = "screen";
+    ctx.setLineDash([10, 10]);
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.9)`;
     const tips = [4, 8, 12, 16, 20];
     tips.forEach((tipIdx, i) => {
         const tip = landmarks[tipIdx];
-        const tx = tip.x * canvasElement.width - x;
-        const ty = tip.y * canvasElement.height - y;
+        const tx = tip.x * canvasElement.width;
+        const ty = tip.y * canvasElement.height;
         
-        const lineLen = Math.sqrt(tx*tx + ty*ty);
-        const sweep = (time / 10 + i * 50) % lineLen;
-
         ctx.beginPath();
-        ctx.moveTo(0, 0);
+        ctx.moveTo(x, y);
         ctx.lineTo(tx, ty);
         ctx.stroke();
         
-        const hx = (tx / lineLen) * sweep;
-        const hy = (ty / lineLen) * sweep;
+        // Massive blocks at the fingertips
         ctx.beginPath();
-        ctx.arc(hx, hy, 3, 0, 2*Math.PI);
-        ctx.fillStyle = "#fff";
-        ctx.fill();
-        
-        ctx.beginPath();
-        ctx.arc(tx, ty, 6 + Math.sin(time/100 + i)*2, 0, 2 * Math.PI);
-        ctx.fillStyle = `hsla(${hue}, 100%, 60%, 0.9)`;
+        ctx.rect(tx - 8, ty - 8, 16, 16);
+        ctx.fillStyle = `hsla(${hue}, 100%, 70%, 1)`;
         ctx.fill();
     });
-
     ctx.restore();
 }
 
@@ -551,8 +556,8 @@ function speakText(text) {
     
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-GB';
-    utterance.pitch = 0.8;
-    utterance.rate = 1.05;
+    utterance.pitch = 1.0;
+    utterance.rate = 1.0;
     
     const voices = window.speechSynthesis.getVoices();
     let jarvisVoice = voices.find(v => 
