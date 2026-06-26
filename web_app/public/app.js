@@ -1,4 +1,4 @@
-import { HandLandmarker, ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+import { HandLandmarker, ObjectDetector, FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
 const video = document.getElementById("webcam");
 const canvasElement = document.getElementById("output_canvas");
@@ -15,9 +15,11 @@ const notificationsBox = document.getElementById("notifications-box");
 
 let handLandmarker = undefined;
 let objectDetector = undefined;
+let faceLandmarker = undefined;
 let runningMode = "VIDEO";
 let webcamRunning = false;
 let lastVideoTime = -1;
+let currentEmotion = "NEUTRAL";
 let jarvisRotation = 0;
 let currentVisualContext = [];
 
@@ -73,11 +75,20 @@ async function createMediaPipeModels() {
         maxResults: 15,
         runningMode: runningMode
     });
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+            delegate: "GPU"
+        },
+        outputFaceBlendshapes: true,
+        runningMode: runningMode,
+        numFaces: 1
+    });
     
     if (initializeSystemButton) {
         initializeSystemButton.classList.remove("disabled");
     }
-    addNotification("AI Models Loaded: Hands & Objects ready.");
+    addNotification("AI Models Loaded: Hands, Objects, & Faces ready.");
     const objOut = document.getElementById("object-output");
     if(objOut) objOut.innerHTML = `<p class="sys-msg">Scanner ready.</p>`;
 }
@@ -94,6 +105,11 @@ let systemInitialized = false;
 
 function initializeSystem(event) {
     if (!handLandmarker) return;
+
+    // Request desktop notification permissions
+    if ("Notification" in window && Notification.permission !== "granted") {
+        Notification.requestPermission();
+    }
 
     if (systemInitialized) {
         // Shutdown
@@ -160,6 +176,7 @@ async function predictWebcam() {
         runningMode = "VIDEO";
         await handLandmarker.setOptions({ runningMode: "VIDEO" });
         await objectDetector.setOptions({ runningMode: "VIDEO" });
+        if (faceLandmarker) await faceLandmarker.setOptions({ runningMode: "VIDEO" });
     }
 
     let startTimeMs = performance.now();
@@ -167,6 +184,36 @@ async function predictWebcam() {
         lastVideoTime = video.currentTime;
         const results = handLandmarker.detectForVideo(video, startTimeMs);
         const objResults = objectDetector.detectForVideo(video, startTimeMs);
+        
+        let faceResults = null;
+        if (faceLandmarker) {
+            faceResults = faceLandmarker.detectForVideo(video, startTimeMs);
+        }
+        
+        if (faceResults && faceResults.faceBlendshapes && faceResults.faceBlendshapes.length > 0) {
+            const blendshapes = faceResults.faceBlendshapes[0].categories;
+            const getScore = (name) => {
+                const b = blendshapes.find(c => c.categoryName === name);
+                return b ? b.score : 0;
+            };
+            
+            const smile = getScore("mouthSmileLeft") + getScore("mouthSmileRight");
+            const jaw = getScore("jawOpen");
+            const browUp = getScore("browInnerUp");
+            const browDown = getScore("browDownLeft") + getScore("browDownRight");
+            
+            let detectedEm = "NEUTRAL";
+            if (smile > 0.8) detectedEm = "HAPPY";
+            else if (jaw > 0.3 && browUp > 0.3) detectedEm = "SURPRISED";
+            else if (browDown > 0.8) detectedEm = "STRESSED";
+            
+            currentEmotion = detectedEm;
+            
+            const emoOut = document.getElementById("emotion-output");
+            if (emoOut) {
+                emoOut.innerHTML = `<p class="sys-msg">EMOTION: ${currentEmotion}</p>`;
+            }
+        }
         
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -556,19 +603,58 @@ if (SpeechRecognition) {
         addVoiceMessage("You", command);
         voiceStatus.textContent = "VOICE: PROCESSING";
         
+        // Capture snapshot from webcam for Vision AI
+        let base64Image = null;
+        if (webcamRunning && video.videoWidth > 0) {
+            const snapCanvas = document.createElement("canvas");
+            snapCanvas.width = video.videoWidth;
+            snapCanvas.height = video.videoHeight;
+            // Draw the current video frame to a temporary canvas
+            snapCanvas.getContext("2d").drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
+            // Get base64 jpeg data (remove the data:image/jpeg;base64, prefix)
+            base64Image = snapCanvas.toDataURL("image/jpeg", 0.8).split(',')[1];
+        }
+
         // Send to backend via REST API
         fetch('/api/voice', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ prompt: command, context: currentVisualContext })
+            body: JSON.stringify({ prompt: command, context: currentVisualContext, image: base64Image, emotion: currentEmotion })
         })
         .then(res => res.json())
         .then(data => {
             if (data.response) {
-                addVoiceMessage("J.A.R.V.I.S.", data.response);
-                speakText(data.response);
+                let cleanResponse = data.response;
+                
+                // Parse hidden Reminder Protocol
+                const reminderRegex = /\|\|REMINDER:(\d+):(.*)\|\|/s;
+                const match = cleanResponse.match(reminderRegex);
+                
+                if (match) {
+                    const seconds = parseInt(match[1]);
+                    const message = match[2].trim();
+                    
+                    // Strip the hidden protocol string so it isn't spoken aloud
+                    cleanResponse = cleanResponse.replace(reminderRegex, "").trim();
+                    
+                    // Set the actual javascript timer
+                    addNotification(`Reminder set for ${seconds} second(s).`);
+                    setTimeout(() => {
+                        if (Notification.permission === "granted") {
+                            new Notification("J.A.R.V.I.S. Reminder", { body: message });
+                        }
+                        speakText("Sir, here is your reminder: " + message);
+                        addNotification("REMINDER: " + message);
+                        addVoiceMessage("J.A.R.V.I.S.", "Reminder: " + message);
+                    }, seconds * 1000);
+                }
+                
+                if (cleanResponse.length > 0) {
+                    addVoiceMessage("J.A.R.V.I.S.", cleanResponse);
+                    speakText(cleanResponse);
+                }
             }
             if (isVoiceEnabled) {
                 voiceStatus.textContent = "VOICE: LISTENING";

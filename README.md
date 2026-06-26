@@ -4,10 +4,12 @@ Welcome to **autobotx**, a futuristic AI assistant integrating powerful hand ges
 
 ## Features
 
-- **Advanced Hand Gesture Recognition:** Utilizes MediaPipe for high-performance, real-time hand tracking. Control the system using intuitive gestures like pinches, finger counting, and open palms.
-- **Voice Commands:** Integrated local and cloud-based speech recognition allows you to speak naturally to autobotx.
-- **Web Interface:** Includes a fully functional web dashboard with sign language recognition and a beautiful holographic UI.
-- **Cross-Platform:** Designed to run seamlessly on Linux, macOS, and Windows.
+- **Context-Aware Spatial AI:** AutobotX uses live multi-modal vision to "read the room." Hold up an object or text, and the AI reads the high-res snapshot to answer your questions.
+- **Desktop Memory & Reminders:** A built-in asynchronous memory protocol. Ask Jarvis to remind you of something in a few seconds, and it triggers a native OS Push Notification.
+- **Empathetic Emotion Engine:** AutobotX tracks 52 micro-muscle movements in your face to determine your emotion (Happy, Surprised, Stressed), adapting its conversational tone to match your mood in real-time.
+- **Advanced Hand Gesture Recognition:** Utilizes MediaPipe for high-performance, real-time hand tracking. Control the system using intuitive gestures.
+- **Voice Commands:** Integrated local and cloud-based speech recognition allows you to speak naturally.
+- **Web Interface:** Includes a fully functional web dashboard with a clean Apple-style interface.
 
 ## Installation
 

@@ -22,9 +22,13 @@ chat_session = model.start_chat(history=[])
 
 app = FastAPI(title="Autobot API")
 
+from typing import Optional
+
 class VoicePrompt(BaseModel):
     prompt: str
     context: list[str] = []
+    image: Optional[str] = None
+    emotion: Optional[str] = "NEUTRAL"
 
 @app.post("/api/voice")
 async def process_voice(data: VoicePrompt):
@@ -38,9 +42,21 @@ async def process_voice(data: VoicePrompt):
     if context and len(context) > 0:
         objects = ", ".join(context)
         prompt = f"[SYSTEM: The user's camera currently sees these objects in the room: {objects}]\nUser says: {prompt}"
+        
+    # Inject emotion context
+    if data.emotion and data.emotion != "NEUTRAL":
+        prompt = f"[SYSTEM: The user's facial expression currently shows they are: {data.emotion}. Adapt your tone accordingly.]\n{prompt}"
+        
+    prompt = f"{prompt}\n[SYSTEM DIRECTIVE: 1. You are receiving a live snapshot of the user's environment. If analyzing documents or lists, summarize in 1-2 sentences. 2. If the user asks you to remind them about something, you MUST append the exact string ||REMINDER:[seconds]:[message]|| to the very end of your response, replacing [seconds] with the total number of seconds to wait, and [message] with a short reminder text.]"
     
     try:
-        llm_response = chat_session.send_message(prompt)
+        content = [prompt]
+        if data.image:
+            import base64
+            image_bytes = base64.b64decode(data.image)
+            content.append({"mime_type": "image/jpeg", "data": image_bytes})
+            
+        llm_response = chat_session.send_message(content)
         return {"response": llm_response.text}
     except Exception as llm_err:
         print(f"LLM Error: {llm_err}")
